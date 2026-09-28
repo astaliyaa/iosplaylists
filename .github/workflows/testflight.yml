@@ -22,11 +22,12 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 60
     env:
-      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-      APP_STORE_CONNECT_KEY_IDENTIFIER: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER }}
+      # The IDs aren't sensitive, so they may be set as secrets or variables.
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID || vars.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_KEY_IDENTIFIER: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER || vars.APP_STORE_CONNECT_KEY_IDENTIFIER }}
       APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
       CERTIFICATE_PRIVATE_KEY: ${{ secrets.CERTIFICATE_PRIVATE_KEY }}
-      BUNDLE_ID: ${{ vars.BUNDLE_ID }}
+      BUNDLE_ID: ${{ vars.BUNDLE_ID || secrets.BUNDLE_ID }}
     steps:
       - name: Check configuration
         run: |
@@ -34,7 +35,7 @@ jobs:
           for name in APP_STORE_CONNECT_ISSUER_ID APP_STORE_CONNECT_KEY_IDENTIFIER \
                       APP_STORE_CONNECT_PRIVATE_KEY CERTIFICATE_PRIVATE_KEY BUNDLE_ID; do
             if [ -z "${!name}" ]; then
-              echo "::error::$name is not set. See 'One-time setup' in README.md."
+              echo "::error::$name is not set (or is empty). Check the name under Settings > Secrets and variables > Actions; see README.md."
               missing=1
             fi
           done
