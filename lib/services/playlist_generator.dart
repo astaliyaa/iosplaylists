@@ -1,50 +1,18 @@
 import '../models/library_song.dart';
 import 'claude_client.dart';
 import 'library_catalog.dart';
+import 'playlist_engine.dart';
 
-class PlaylistDraft {
-  const PlaylistDraft({
-    required this.name,
-    required this.description,
-    required this.songs,
-    this.note = '',
-  });
+export 'playlist_engine.dart';
 
-  final String name;
-  final String description;
-  final List<LibrarySong> songs;
-
-  /// Optional remark from Claude, e.g. that the library ran short.
-  final String note;
-}
-
-class GenerationException implements Exception {
-  GenerationException(this.message);
-
-  final String message;
-
-  @override
-  String toString() => message;
-}
-
-/// A generated playlist plus the conversation that produced it, so it can be
-/// refined with follow-up feedback.
-class PlaylistSession {
-  PlaylistSession._(this.catalog, this._messages, this.draft);
-
-  final LibraryCatalog catalog;
-  final List<Map<String, dynamic>> _messages;
-  PlaylistDraft draft;
-}
-
-/// Turns a prompt into a playlist drawn from the user's library.
+/// Uses Claude to turn a prompt into a playlist drawn from the user's library.
 ///
 /// Normally the whole library listing is sent in one request (and cached, so
 /// follow-ups are cheap). Libraries whose listing would exceed
 /// [fullCatalogTokenBudget] are narrowed down first: Claude picks promising
 /// artists from a one-line-per-artist summary, then chooses songs from those
 /// artists only.
-class PlaylistGenerator {
+class PlaylistGenerator implements PlaylistEngine {
   PlaylistGenerator(
     this.model, {
     this.fullCatalogTokenBudget = defaultFullCatalogTokenBudget,
@@ -58,6 +26,7 @@ class PlaylistGenerator {
   final int fullCatalogTokenBudget;
   final int maxShortlistArtists;
 
+  @override
   Future<PlaylistSession> generate({
     required LibraryCatalog catalog,
     required String prompt,
@@ -107,22 +76,28 @@ class PlaylistGenerator {
       schema: playlistSchema,
     );
     messages.add({'role': 'assistant', 'content': reply.content});
-    return PlaylistSession._(catalog, messages, _toDraft(catalog, reply.json));
+    return PlaylistSession(
+      catalog: catalog,
+      prompt: prompt,
+      songCount: songCount,
+      draft: _toDraft(catalog, reply.json),
+      state: messages,
+    );
   }
 
-  /// Revises [session]'s playlist. [current] is the playlist as the user sees
-  /// it now, including any songs they removed or reordered by hand.
+  @override
   Future<PlaylistDraft> refine({
     required PlaylistSession session,
     required PlaylistDraft current,
     required String feedback,
   }) async {
     final catalog = session.catalog;
+    final history = session.state! as List<Map<String, dynamic>>;
     final currentIds = [
       for (final song in current.songs) ?catalog.idForSong(song),
     ];
     final messages = [
-      ...session._messages,
+      ...history,
       {
         'role': 'user',
         'content':
@@ -140,7 +115,7 @@ class PlaylistGenerator {
       schema: playlistSchema,
     );
     final draft = _toDraft(catalog, reply.json);
-    session._messages
+    history
       ..clear()
       ..addAll(messages)
       ..add({'role': 'assistant', 'content': reply.content});

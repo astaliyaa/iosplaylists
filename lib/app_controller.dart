@@ -4,6 +4,8 @@ import 'models/library_song.dart';
 import 'services/claude_client.dart';
 import 'services/library_catalog.dart';
 import 'services/music_library.dart';
+import 'services/on_device_generator.dart';
+import 'services/on_device_model.dart';
 import 'services/playlist_generator.dart';
 import 'services/settings_store.dart';
 
@@ -12,14 +14,17 @@ class AppController extends ChangeNotifier {
   AppController({
     required this.library,
     required this.settingsStore,
+    OnDeviceModel? onDeviceModel,
     this.createModel = _defaultModel,
-  });
+  }) : onDeviceModel = onDeviceModel ?? createOnDeviceModel();
 
   final MusicLibrary library;
   final SettingsStore settingsStore;
+  final OnDeviceModel onDeviceModel;
   final JsonModel Function(Settings settings) createModel;
 
   Settings settings = const Settings();
+  OnDeviceStatus onDeviceStatus = OnDeviceStatus.unavailable;
   MusicAccess? access;
   List<LibrarySong>? songs;
   bool loadingLibrary = false;
@@ -39,12 +44,28 @@ class AppController extends ChangeNotifier {
     } on Object catch (error) {
       debugPrint('Could not load settings: $error');
     }
-    notifyListeners();
+    await refreshOnDeviceStatus();
     await _guard(() async {
       access = await library.accessStatus();
       if (access == MusicAccess.authorized) await _loadSongs();
     });
   }
+
+  Future<void> refreshOnDeviceStatus() async {
+    try {
+      onDeviceStatus = await onDeviceModel.status();
+    } on Object {
+      onDeviceStatus = OnDeviceStatus.unavailable;
+    }
+    notifyListeners();
+  }
+
+  /// Why playlists can't be generated with the current settings, or null.
+  String? get engineProblem => switch (settings.engine) {
+    Engine.onDevice => onDeviceStatus.problem,
+    Engine.claude =>
+      settings.hasApiKey ? null : 'Add your Anthropic API key in Settings.',
+  };
 
   Future<void> connectLibrary() => _guard(() async {
     access = await library.requestAccess();
@@ -59,7 +80,7 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// The catalog Claude chooses from; explicit songs can be left out.
+  /// The songs playlists are drawn from; explicit songs can be left out.
   LibraryCatalog catalog({required bool allowExplicit}) =>
       _catalogs[allowExplicit] ??= LibraryCatalog.build(
         allowExplicit
@@ -67,7 +88,10 @@ class AppController extends ChangeNotifier {
             : (songs ?? const []).where((song) => !song.explicit),
       );
 
-  PlaylistGenerator newGenerator() => PlaylistGenerator(createModel(settings));
+  PlaylistEngine newGenerator() => switch (settings.engine) {
+    Engine.onDevice => OnDeviceGenerator(onDeviceModel),
+    Engine.claude => PlaylistGenerator(createModel(settings)),
+  };
 
   Future<void> savePlaylist(PlaylistDraft draft) => library.createPlaylist(
     name: draft.name,

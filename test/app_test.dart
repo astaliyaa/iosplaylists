@@ -4,6 +4,7 @@ import 'package:promptlist/app_controller.dart';
 import 'package:promptlist/main.dart';
 import 'package:promptlist/services/claude_client.dart';
 import 'package:promptlist/services/demo_library.dart';
+import 'package:promptlist/services/on_device_model.dart';
 import 'package:promptlist/services/settings_store.dart';
 
 class MemorySettingsStore extends SettingsStore {
@@ -46,10 +47,41 @@ class ScriptedModel implements JsonModel {
   }
 }
 
+class FakeOnDeviceModel implements OnDeviceModel {
+  FakeOnDeviceModel(this.currentStatus);
+
+  final OnDeviceStatus currentStatus;
+  final prompts = <String>[];
+
+  @override
+  Future<OnDeviceStatus> status() async => currentStatus;
+
+  @override
+  Future<OnDevicePlan> plan({
+    required String instructions,
+    required String prompt,
+  }) async {
+    prompts.add(prompt);
+    return const OnDevicePlan(
+      name: 'Quiet Folk',
+      description: 'Soft and acoustic.',
+      genres: ['Folk'],
+    );
+  }
+
+  @override
+  Future<List<int>> pick({
+    required String instructions,
+    required String prompt,
+  }) async => [1];
+}
+
 void main() {
   Future<(AppController, RecordingLibrary, ScriptedModel)> pumpApp(
     WidgetTester tester, {
+    Engine engine = Engine.claude,
     String apiKey = 'sk-ant-test',
+    OnDeviceModel? onDeviceModel,
   }) async {
     tester.view.physicalSize = const Size(1170, 2532);
     tester.view.devicePixelRatio = 3;
@@ -71,7 +103,10 @@ void main() {
     ]);
     final controller = AppController(
       library: library,
-      settingsStore: MemorySettingsStore(Settings(apiKey: apiKey)),
+      settingsStore: MemorySettingsStore(
+        Settings(engine: engine, apiKey: apiKey),
+      ),
+      onDeviceModel: onDeviceModel,
       createModel: (_) => model,
     );
     await controller.init();
@@ -134,5 +169,61 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Add your Anthropic API key'), findsNothing);
+  });
+
+  testWidgets('free mode builds playlists on the device', (tester) async {
+    final onDevice = FakeOnDeviceModel(OnDeviceStatus.available);
+    await pumpApp(
+      tester,
+      engine: Engine.onDevice,
+      apiKey: '',
+      onDeviceModel: onDevice,
+    );
+
+    await tester.scrollUntilVisible(
+      find.text('Using Apple Intelligence on this iPhone (free)'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Add your Anthropic API key'), findsNothing);
+
+    await tester.enterText(find.byType(TextField), 'quiet folk');
+    await tester.pump();
+    await tester.tap(find.text('Create playlist'));
+    await tester.pumpAndSettle();
+
+    expect(onDevice.prompts.single, contains('Request: quiet folk'));
+    expect(find.text('Quiet Folk'), findsOneWidget);
+    // The demo library has three folk songs, fewer than the 25 asked for.
+    expect(find.text('Mykonos'), findsOneWidget);
+    expect(find.text('White Winter Hymnal'), findsOneWidget);
+    expect(
+      find.text('Only 3 songs in your library fit this request.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('explains when free mode is unavailable', (tester) async {
+    await pumpApp(
+      tester,
+      engine: Engine.onDevice,
+      apiKey: '',
+      onDeviceModel: FakeOnDeviceModel(OnDeviceStatus.deviceNotEligible),
+    );
+
+    expect(find.text('Free mode isn’t available'), findsOneWidget);
+    expect(find.textContaining('iPhone 15 Pro or newer'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'anything');
+    await tester.pump();
+    await tester.scrollUntilVisible(
+      find.text('Create playlist'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    final create = find.ancestor(
+      of: find.text('Create playlist'),
+      matching: find.byWidgetPredicate((widget) => widget is FilledButton),
+    );
+    expect(tester.widget<FilledButton>(create).onPressed, isNull);
   });
 }

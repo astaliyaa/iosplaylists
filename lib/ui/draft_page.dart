@@ -22,7 +22,7 @@ class DraftPage extends StatefulWidget {
   });
 
   final AppController controller;
-  final PlaylistGenerator generator;
+  final PlaylistEngine generator;
   final PlaylistSession session;
 
   @override

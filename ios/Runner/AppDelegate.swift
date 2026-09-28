@@ -15,5 +15,8 @@ import UIKit
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "MusicLibraryPlugin") {
       MusicLibraryPlugin.register(with: registrar)
     }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OnDeviceModelPlugin") {
+      OnDeviceModelPlugin.register(with: registrar)
+    }
   }
 }

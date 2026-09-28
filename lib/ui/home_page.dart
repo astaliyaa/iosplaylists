@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app_controller.dart';
 import '../services/music_library.dart';
+import '../services/settings_store.dart';
 import 'draft_page.dart';
 import 'settings_page.dart';
 
@@ -89,9 +90,10 @@ class _HomePageState extends State<HomePage> {
     return ListenableBuilder(
       listenable: _controller,
       builder: (context, _) {
+        final settings = _controller.settings;
+        final problem = _controller.engineProblem;
         final ready =
-            _controller.settings.hasApiKey &&
-            (_controller.songs?.isNotEmpty ?? false);
+            problem == null && (_controller.songs?.isNotEmpty ?? false);
         return Scaffold(
           appBar: AppBar(
             title: const Text('Promptlist'),
@@ -108,13 +110,25 @@ class _HomePageState extends State<HomePage> {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
               children: [
                 _LibraryCard(controller: _controller),
-                if (!_controller.settings.hasApiKey)
+                if (problem != null)
                   Card(
                     child: ListTile(
-                      leading: const Icon(Icons.key_outlined),
-                      title: const Text('Add your Anthropic API key'),
-                      subtitle: const Text(
-                        'Claude picks the songs, so it needs a key.',
+                      leading: Icon(
+                        settings.engine == Engine.claude
+                            ? Icons.key_outlined
+                            : Icons.phone_iphone,
+                      ),
+                      title: Text(
+                        settings.engine == Engine.claude
+                            ? 'Add your Anthropic API key'
+                            : 'Free mode isn’t available',
+                      ),
+                      subtitle: Text(
+                        settings.engine == Engine.claude
+                            ? 'Claude picks the songs, so it needs a key. Or '
+                                  'switch to the free on-device mode.'
+                            : '$problem You can use Claude instead in '
+                                  'Settings.',
                       ),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: _openSettings,
@@ -185,6 +199,14 @@ class _HomePageState extends State<HomePage> {
                           : null,
                     ),
                   ),
+                const SizedBox(height: 8),
+                Text(
+                  settings.engine == Engine.claude
+                      ? 'Using ${settings.model.label}'
+                      : 'Using Apple Intelligence on this iPhone (free)',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ],
             ),
           ),
