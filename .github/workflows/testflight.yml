@@ -1,10 +1,14 @@
 # Builds a signed release and uploads it to TestFlight.
-# Run it from the Actions tab ("TestFlight" > "Run workflow").
+# Run it from the Actions tab ("TestFlight" > "Run workflow"), or push a tag
+# starting with "testflight-" (e.g. testflight-2).
 # One-time setup (secrets, bundle ID, App Store Connect app): see README.md.
 name: TestFlight
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - 'testflight-*'
 
 jobs:
   testflight:
