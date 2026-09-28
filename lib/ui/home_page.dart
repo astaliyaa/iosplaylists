@@ -113,23 +113,26 @@ class _HomePageState extends State<HomePage> {
                 if (problem != null)
                   Card(
                     child: ListTile(
-                      leading: Icon(
-                        settings.engine == Engine.claude
-                            ? Icons.key_outlined
-                            : Icons.phone_iphone,
-                      ),
-                      title: Text(
-                        settings.engine == Engine.claude
-                            ? 'Add your Anthropic API key'
-                            : 'Free mode isn’t available',
-                      ),
-                      subtitle: Text(
-                        settings.engine == Engine.claude
-                            ? 'Claude picks the songs, so it needs a key. Or '
-                                  'switch to the free on-device mode.'
-                            : '$problem You can use Claude instead in '
-                                  'Settings.',
-                      ),
+                      leading: Icon(switch (settings.engine) {
+                        Engine.onDevice => Icons.phone_iphone,
+                        _ => Icons.key_outlined,
+                      }),
+                      title: Text(switch (settings.engine) {
+                        Engine.onDevice => 'Apple Intelligence isn’t available',
+                        Engine.gemini => 'Add your Gemini API key',
+                        Engine.claude => 'Add your Anthropic API key',
+                      }),
+                      subtitle: Text(switch (settings.engine) {
+                        Engine.onDevice =>
+                          '$problem You can use Gemini (free) or Claude '
+                              'instead in Settings.',
+                        Engine.gemini =>
+                          'Get a free key at aistudio.google.com, then paste '
+                              'it in Settings.',
+                        Engine.claude =>
+                          'Claude picks the songs, so it needs a key. Or '
+                              'switch to a free mode in Settings.',
+                      }),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: _openSettings,
                     ),
@@ -201,9 +204,13 @@ class _HomePageState extends State<HomePage> {
                   ),
                 const SizedBox(height: 8),
                 Text(
-                  settings.engine == Engine.claude
-                      ? 'Using ${settings.model.label}'
-                      : 'Using Apple Intelligence on this iPhone (free)',
+                  switch (settings.engine) {
+                    Engine.onDevice =>
+                      'Using Apple Intelligence on this iPhone (free)',
+                    Engine.gemini =>
+                      'Using ${settings.geminiModel} (free tier)',
+                    Engine.claude => 'Using ${settings.model.label}',
+                  },
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodySmall,
                 ),

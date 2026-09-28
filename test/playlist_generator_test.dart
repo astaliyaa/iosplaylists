@@ -21,7 +21,7 @@ class FakeModel implements JsonModel {
   final contents = <List<dynamic>>[];
 
   @override
-  Future<ClaudeReply> createJson({
+  Future<ModelReply> createJson({
     required String system,
     required List<Map<String, dynamic>> messages,
     required Map<String, dynamic> schema,
@@ -32,7 +32,7 @@ class FakeModel implements JsonModel {
       {'type': 'text', 'text': '$json'},
     ];
     contents.add(content);
-    return ClaudeReply(json: json, content: content);
+    return ModelReply(json: json, content: content);
   }
 }
 

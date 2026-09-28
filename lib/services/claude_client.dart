@@ -1,8 +1,11 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+
+import 'json_model.dart';
+
+export 'json_model.dart';
 
 /// Claude models offered in Settings.
 enum ClaudeModel {
@@ -32,34 +35,8 @@ enum ClaudeModel {
 
 enum Effort { low, medium, high }
 
-class ClaudeException implements Exception {
-  ClaudeException(this.message, {this.statusCode});
-
-  final String message;
-  final int? statusCode;
-
-  @override
-  String toString() => message;
-}
-
-/// A structured reply: the parsed JSON plus the raw assistant content, which
-/// must be sent back unchanged to continue the conversation.
-class ClaudeReply {
-  const ClaudeReply({required this.json, required this.content, this.usage});
-
-  final Map<String, dynamic> json;
-  final List<dynamic> content;
-  final Map<String, dynamic>? usage;
-}
-
-/// Something that answers a conversation with JSON matching a schema.
-/// [ClaudeClient] is the real one; tests substitute fakes.
-abstract class JsonModel {
-  Future<ClaudeReply> createJson({
-    required String system,
-    required List<Map<String, dynamic>> messages,
-    required Map<String, dynamic> schema,
-  });
+class ClaudeException extends ApiException {
+  ClaudeException(super.message, {super.statusCode});
 }
 
 /// Minimal client for the Claude Messages API using structured outputs.
@@ -116,7 +93,7 @@ class ClaudeClient implements JsonModel {
   };
 
   @override
-  Future<ClaudeReply> createJson({
+  Future<ModelReply> createJson({
     required String system,
     required List<Map<String, dynamic>> messages,
     required Map<String, dynamic> schema,
@@ -124,49 +101,23 @@ class ClaudeClient implements JsonModel {
     final body = jsonEncode(
       buildBody(system: system, messages: messages, schema: schema),
     );
-    final response = await _postWithRetries(body);
+    final response = await postWithRetries(
+      client: _http,
+      url: endpoint,
+      headers: buildHeaders(),
+      body: body,
+      serviceName: 'Claude',
+      timeout: timeout,
+      maxRetries: maxRetries,
+      retryDelay: retryDelay,
+      error: ClaudeException.new,
+    );
     return parseResponse(response.statusCode, response.body);
   }
 
-  Future<http.Response> _postWithRetries(String body) async {
-    for (var attempt = 0; ; attempt++) {
-      http.Response? response;
-      Object? networkError;
-      try {
-        response = await _http
-            .post(endpoint, headers: buildHeaders(), body: body)
-            .timeout(timeout);
-      } on TimeoutException {
-        throw ClaudeException('Claude took too long to answer. Try again.');
-      } on http.ClientException catch (error) {
-        networkError = error;
-      }
-
-      final retryable =
-          networkError != null ||
-          response!.statusCode == 429 ||
-          response.statusCode >= 500;
-      if (!retryable || attempt >= maxRetries) {
-        if (networkError != null) {
-          throw ClaudeException(
-            'Could not reach Claude. Check your connection. ($networkError)',
-          );
-        }
-        return response!;
-      }
-
-      final retryAfter = int.tryParse(response?.headers['retry-after'] ?? '');
-      await Future.delayed(
-        retryAfter != null && retryAfter <= 30
-            ? Duration(seconds: retryAfter)
-            : retryDelay * (1 << attempt),
-      );
-    }
-  }
-
-  /// Turns an HTTP response into a [ClaudeReply] or a readable error.
+  /// Turns an HTTP response into a [ModelReply] or a readable error.
   @visibleForTesting
-  static ClaudeReply parseResponse(int statusCode, String body) {
+  static ModelReply parseResponse(int statusCode, String body) {
     Map<String, dynamic>? decoded;
     try {
       final parsed = jsonDecode(body);
@@ -207,7 +158,7 @@ class ClaudeClient implements JsonModel {
         .map((block) => block['text'] as String)
         .join();
     try {
-      return ClaudeReply(
+      return ModelReply(
         json: jsonDecode(text) as Map<String, dynamic>,
         content: content,
         usage: decoded['usage'] as Map<String, dynamic>?,

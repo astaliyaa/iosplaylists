@@ -5,11 +5,12 @@ import 'playlist_engine.dart';
 
 export 'playlist_engine.dart';
 
-/// Uses Claude to turn a prompt into a playlist drawn from the user's library.
+/// Uses a cloud model (Claude or Gemini) to turn a prompt into a playlist
+/// drawn from the user's library.
 ///
 /// Normally the whole library listing is sent in one request (and cached, so
 /// follow-ups are cheap). Libraries whose listing would exceed
-/// [fullCatalogTokenBudget] are narrowed down first: Claude picks promising
+/// [fullCatalogTokenBudget] are narrowed down first: the model picks promising
 /// artists from a one-line-per-artist summary, then chooses songs from those
 /// artists only.
 class PlaylistGenerator implements PlaylistEngine {
@@ -166,7 +167,7 @@ class PlaylistGenerator implements PlaylistEngine {
     }
     if (picked.isEmpty) {
       throw GenerationException(
-        'Claude couldn’t find any artists in your library for that request.',
+        'The AI couldn’t find any artists in your library for that request.',
       );
     }
     return picked;
@@ -187,7 +188,7 @@ class PlaylistGenerator implements PlaylistEngine {
       throw GenerationException(
         note.isNotEmpty
             ? note
-            : 'Claude didn’t pick any songs. Try rephrasing your request.',
+            : 'The AI didn’t pick any songs. Try rephrasing your request.',
       );
     }
     final name = (json['name'] as String? ?? '').trim();

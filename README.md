@@ -9,10 +9,13 @@ your library**, based on a prompt like *"late-night drive, synthy and moody"*.
    - **Apple Intelligence (free, the default)** runs on the iPhone, so nothing
      leaves the phone. It needs an iPhone 15 Pro or newer on iOS 26 with Apple
      Intelligence turned on. Its picks are simpler because it can only read a
-     short list at a time (see [How the free mode works](#how-the-free-mode-works)).
-   - **Claude (paid)** reads a compact listing of your whole library (artist,
-     album, year, genre, play count) and makes better picks. It needs an
-     Anthropic API key.
+     short list at a time (see [How the Apple Intelligence mode works](#how-the-apple-intelligence-mode-works)).
+   - **Gemini (free tier)** reads a compact listing of your whole library
+     (artist, album, year, genre, play count) and is fast. It needs a free
+     Google AI Studio API key; Google limits free requests per minute and per
+     day, and may use free-tier requests to improve its products.
+   - **Claude (paid)** reads the same listing and makes the best picks. It
+     needs an Anthropic API key.
 3. You can edit the result, remove or reorder songs, or ask for changes
    ("more upbeat", "no rap").
 4. **Save to Music** creates the playlist in your Apple Music library.
@@ -26,9 +29,12 @@ a Mac.
 - An Apple Developer Program membership (you have one).
 - An iPhone on iOS 16 or later with Apple Music, and **Sync Library** turned on
   (Settings › Apps › Music).
-- For the free mode: an iPhone 15 Pro or newer on iOS 26 with Apple
-  Intelligence on. For Claude: an Anthropic API key with some credit
-  (<https://console.anthropic.com> › API Keys).
+- One of:
+  - Apple Intelligence: an iPhone 15 Pro or newer on iOS 26 with Apple
+    Intelligence on.
+  - Gemini: a free API key from <https://aistudio.google.com> › Get API key.
+  - Claude: an Anthropic API key with some credit
+    (<https://console.anthropic.com> › API Keys).
 - This GitHub repository.
 
 ## One-time setup
@@ -122,9 +128,9 @@ fresh one.
 ## Using the app
 
 1. Tap **Connect** and allow access to Apple Music.
-2. Free mode works right away. To use Claude instead, open **Settings** (gear
-   icon), choose **Claude** and paste your Anthropic API key. You can also pick
-   the model and how hard it thinks.
+2. Apple Intelligence works right away. To use Gemini or Claude instead, open
+   **Settings** (gear icon), choose it under **Who picks the songs** and paste
+   its API key. You can also pick the model.
 3. Describe the playlist, choose a rough length, and tap **Create playlist**.
 4. On the preview, swipe a song left to remove it, hold and drag to reorder,
    edit the name, or tap **Refine** to ask for changes.
@@ -134,7 +140,7 @@ fresh one.
 Prompts can refer to your listening habits ("my most played", "stuff I've
 barely listened to") because the listing includes play counts.
 
-## How the free mode works
+## How the Apple Intelligence mode works
 
 Apple's on-device model can only read a few thousand words at a time, so it
 never sees your whole library. Instead:
@@ -151,7 +157,9 @@ again.
 
 ## What it costs
 
-The free mode costs nothing.
+Apple Intelligence costs nothing. Gemini's free tier costs nothing either, up
+to Google's per-minute and per-day limits (see yours at aistudio.google.com ›
+Usage). If Google retires the default model, change the model ID in Settings.
 
 With Claude, each new playlist sends your library listing to Claude, about 10
 tokens per song. With Claude Opus 5 (the default Claude model), a 5,000-song
@@ -183,6 +191,7 @@ those artists only.
 | `lib/services/library_catalog.dart` | Turns your library into the compact listing Claude reads |
 | `lib/services/playlist_generator.dart` | Prompts, artist shortlisting for big libraries, refinement |
 | `lib/services/claude_client.dart` | Calls the Claude Messages API with structured JSON output |
+| `lib/services/gemini_client.dart` | Calls the Gemini API (`generateContent`) with JSON output |
 | `lib/services/on_device_generator.dart` | Free mode: search criteria, library ranking, shortlist picking |
 | `ios/Runner/OnDeviceModelPlugin.swift` | Apple's on-device model (Foundation Models) |
 | `lib/services/music_library.dart` | Dart side of the Apple Music bridge, plus the demo library switch |

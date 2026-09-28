@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app_controller.dart';
 import '../services/claude_client.dart';
+import '../services/gemini_client.dart';
 import '../services/library_catalog.dart';
 import '../services/playlist_generator.dart';
 import '../services/settings_store.dart';
@@ -17,6 +18,8 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _apiKey;
+  late final TextEditingController _geminiKey;
+  late final TextEditingController _geminiModel;
   late Engine _engine;
   late ClaudeModel _model;
   late Effort _effort;
@@ -28,6 +31,8 @@ class _SettingsPageState extends State<SettingsPage> {
     final settings = widget.controller.settings;
     _engine = settings.engine;
     _apiKey = TextEditingController(text: settings.apiKey);
+    _geminiKey = TextEditingController(text: settings.geminiApiKey);
+    _geminiModel = TextEditingController(text: settings.geminiModel);
     _model = settings.model;
     _effort = settings.effort;
   }
@@ -35,6 +40,8 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void dispose() {
     _apiKey.dispose();
+    _geminiKey.dispose();
+    _geminiModel.dispose();
     super.dispose();
   }
 
@@ -48,6 +55,10 @@ class _SettingsPageState extends State<SettingsPage> {
           apiKey: _apiKey.text.trim(),
           model: _model,
           effort: _effort,
+          geminiApiKey: _geminiKey.text.trim(),
+          geminiModel: _geminiModel.text.trim().isEmpty
+              ? GeminiModel.defaultId
+              : _geminiModel.text.trim(),
         ),
       );
       navigator.pop();
@@ -56,12 +67,17 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  String? _costHint() {
+  int? _libraryTokens() {
     final songs = widget.controller.songs;
     if (songs == null || songs.isEmpty) return null;
-    final tokens = LibraryCatalog.estimateTokens(
+    return LibraryCatalog.estimateTokens(
       widget.controller.catalog(allowExplicit: true).renderSongs(),
     );
+  }
+
+  String? _costHint() {
+    final tokens = _libraryTokens();
+    if (tokens == null) return null;
     const budget = PlaylistGenerator.defaultFullCatalogTokenBudget;
     final sent = tokens > budget ? budget : tokens;
     // Cache writes cost 1.25× the base input price.
@@ -100,6 +116,14 @@ class _SettingsPageState extends State<SettingsPage> {
             onTap: () => setState(() => _engine = Engine.onDevice),
           ),
           _option(
+            selected: _engine == Engine.gemini,
+            title: 'Gemini (free tier)',
+            subtitle:
+                'Reads your whole library and is fast. Free with daily limits; '
+                'needs a free Google AI Studio key.',
+            onTap: () => setState(() => _engine = Engine.gemini),
+          ),
+          _option(
             selected: _engine == Engine.claude,
             title: 'Claude (paid)',
             subtitle:
@@ -107,6 +131,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 'key; roughly 5–40¢ per new playlist.',
             onTap: () => setState(() => _engine = Engine.claude),
           ),
+          if (_engine == Engine.gemini) ..._geminiSettings(theme),
           if (_engine == Engine.claude) ..._claudeSettings(theme, costHint),
         ],
       ),
@@ -132,24 +157,81 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  List<Widget> _claudeSettings(ThemeData theme, String? costHint) => [
-    const SizedBox(height: 24),
-    TextField(
-      controller: _apiKey,
-      obscureText: !_showKey,
-      autocorrect: false,
-      enableSuggestions: false,
-      decoration: InputDecoration(
-        labelText: 'Anthropic API key',
-        hintText: 'sk-ant-…',
-        border: const OutlineInputBorder(),
-        suffixIcon: IconButton(
-          tooltip: _showKey ? 'Hide key' : 'Show key',
-          icon: Icon(_showKey ? Icons.visibility_off : Icons.visibility),
-          onPressed: () => setState(() => _showKey = !_showKey),
-        ),
+  Widget _keyField(
+    TextEditingController controller,
+    String label,
+    String hint,
+  ) => TextField(
+    controller: controller,
+    obscureText: !_showKey,
+    autocorrect: false,
+    enableSuggestions: false,
+    decoration: InputDecoration(
+      labelText: label,
+      hintText: hint,
+      border: const OutlineInputBorder(),
+      suffixIcon: IconButton(
+        tooltip: _showKey ? 'Hide key' : 'Show key',
+        icon: Icon(_showKey ? Icons.visibility_off : Icons.visibility),
+        onPressed: () => setState(() => _showKey = !_showKey),
       ),
     ),
+  );
+
+  List<Widget> _geminiSettings(ThemeData theme) {
+    final tokens = _libraryTokens();
+    return [
+      const SizedBox(height: 24),
+      _keyField(_geminiKey, 'Gemini API key', 'AIza…'),
+      const SizedBox(height: 8),
+      Text(
+        'Get one free at aistudio.google.com › Get API key. It’s stored in the '
+        'Keychain on this device and only sent to Google. On the free tier, '
+        'Google may use what you send (song list and prompts) to improve its '
+        'products.',
+        style: theme.textTheme.bodySmall,
+      ),
+      const SizedBox(height: 24),
+      Text('Model', style: theme.textTheme.titleMedium),
+      for (final model in GeminiModel.values)
+        _option(
+          selected: _geminiModel.text.trim() == model.id,
+          title: model.label,
+          subtitle: model.blurb,
+          onTap: () => setState(() => _geminiModel.text = model.id),
+        ),
+      const SizedBox(height: 8),
+      TextField(
+        controller: _geminiModel,
+        autocorrect: false,
+        enableSuggestions: false,
+        decoration: const InputDecoration(
+          labelText: 'Model ID',
+          helperText:
+              'Change this if Google retires the model. Any free Gemini '
+              'model from AI Studio works.',
+          helperMaxLines: 2,
+          border: OutlineInputBorder(),
+        ),
+        onChanged: (_) => setState(() {}),
+      ),
+      if (tokens != null) ...[
+        const SizedBox(height: 24),
+        Text('Limits', style: theme.textTheme.titleMedium),
+        const SizedBox(height: 8),
+        Text(
+          'Your library listing is about ${(tokens / 1000).round()}k tokens '
+          'per new playlist. Google limits free requests per minute and per '
+          'day; you can see yours at aistudio.google.com › Usage.',
+          style: theme.textTheme.bodyMedium,
+        ),
+      ],
+    ];
+  }
+
+  List<Widget> _claudeSettings(ThemeData theme, String? costHint) => [
+    const SizedBox(height: 24),
+    _keyField(_apiKey, 'Anthropic API key', 'sk-ant-…'),
     const SizedBox(height: 8),
     Text(
       'Create one at console.anthropic.com › API Keys. It’s stored in '

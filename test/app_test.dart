@@ -37,13 +37,13 @@ class ScriptedModel implements JsonModel {
   int calls = 0;
 
   @override
-  Future<ClaudeReply> createJson({
+  Future<ModelReply> createJson({
     required String system,
     required List<Map<String, dynamic>> messages,
     required Map<String, dynamic> schema,
   }) async {
     calls++;
-    return ClaudeReply(json: replies.removeAt(0), content: const []);
+    return ModelReply(json: replies.removeAt(0), content: const []);
   }
 }
 
@@ -81,6 +81,7 @@ void main() {
     WidgetTester tester, {
     Engine engine = Engine.claude,
     String apiKey = 'sk-ant-test',
+    String geminiApiKey = '',
     OnDeviceModel? onDeviceModel,
   }) async {
     tester.view.physicalSize = const Size(1170, 2532);
@@ -104,7 +105,7 @@ void main() {
     final controller = AppController(
       library: library,
       settingsStore: MemorySettingsStore(
-        Settings(engine: engine, apiKey: apiKey),
+        Settings(engine: engine, apiKey: apiKey, geminiApiKey: geminiApiKey),
       ),
       onDeviceModel: onDeviceModel,
       createModel: (_) => model,
@@ -171,6 +172,47 @@ void main() {
     expect(find.text('Add your Anthropic API key'), findsNothing);
   });
 
+  testWidgets('Gemini mode needs its own key, then generates', (tester) async {
+    final (controller, _, model) = await pumpApp(
+      tester,
+      engine: Engine.gemini,
+      apiKey: '',
+    );
+
+    expect(find.text('Add your Gemini API key'), findsOneWidget);
+    await tester.tap(find.text('Add your Gemini API key'));
+    await tester.pumpAndSettle();
+    expect(find.text('Gemini 3.8 Flash'), findsOneWidget);
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Gemini API key'),
+      'AIza-test',
+    );
+    await tester.ensureVisible(find.text('Gemini 3.5 Flash-Lite'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Gemini 3.5 Flash-Lite'));
+    await tester.pump();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(controller.settings.geminiApiKey, 'AIza-test');
+    expect(controller.settings.geminiModel, 'gemini-3.5-flash-lite');
+    expect(controller.settings.apiKey, isEmpty);
+    expect(find.text('Add your Gemini API key'), findsNothing);
+
+    await tester.enterText(find.byType(TextField), 'late night drive');
+    await tester.pump();
+    await tester.scrollUntilVisible(
+      find.text('Using gemini-3.5-flash-lite (free tier)'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Create playlist'));
+    await tester.pumpAndSettle();
+
+    expect(model.calls, 1);
+    expect(find.text('Night Drive'), findsOneWidget);
+  });
+
   testWidgets('free mode builds playlists on the device', (tester) async {
     final onDevice = FakeOnDeviceModel(OnDeviceStatus.available);
     await pumpApp(
@@ -211,7 +253,7 @@ void main() {
       onDeviceModel: FakeOnDeviceModel(OnDeviceStatus.deviceNotEligible),
     );
 
-    expect(find.text('Free mode isn’t available'), findsOneWidget);
+    expect(find.text('Apple Intelligence isn’t available'), findsOneWidget);
     expect(find.textContaining('iPhone 15 Pro or newer'), findsOneWidget);
     await tester.enterText(find.byType(TextField), 'anything');
     await tester.pump();

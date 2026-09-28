@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import 'models/library_song.dart';
 import 'services/claude_client.dart';
+import 'services/gemini_client.dart';
 import 'services/library_catalog.dart';
 import 'services/music_library.dart';
 import 'services/on_device_generator.dart';
@@ -32,11 +33,18 @@ class AppController extends ChangeNotifier {
 
   final Map<bool, LibraryCatalog> _catalogs = {};
 
-  static JsonModel _defaultModel(Settings settings) => ClaudeClient(
-    apiKey: settings.apiKey,
-    model: settings.model,
-    effort: settings.effort,
-  );
+  static JsonModel _defaultModel(Settings settings) =>
+      switch (settings.engine) {
+        Engine.gemini => GeminiClient(
+          apiKey: settings.geminiApiKey,
+          model: settings.geminiModel,
+        ),
+        _ => ClaudeClient(
+          apiKey: settings.apiKey,
+          model: settings.model,
+          effort: settings.effort,
+        ),
+      };
 
   Future<void> init() async {
     try {
@@ -63,6 +71,8 @@ class AppController extends ChangeNotifier {
   /// Why playlists can't be generated with the current settings, or null.
   String? get engineProblem => switch (settings.engine) {
     Engine.onDevice => onDeviceStatus.problem,
+    Engine.gemini =>
+      settings.hasGeminiApiKey ? null : 'Add your Gemini API key in Settings.',
     Engine.claude =>
       settings.hasApiKey ? null : 'Add your Anthropic API key in Settings.',
   };
@@ -90,7 +100,7 @@ class AppController extends ChangeNotifier {
 
   PlaylistEngine newGenerator() => switch (settings.engine) {
     Engine.onDevice => OnDeviceGenerator(onDeviceModel),
-    Engine.claude => PlaylistGenerator(createModel(settings)),
+    Engine.gemini || Engine.claude => PlaylistGenerator(createModel(settings)),
   };
 
   Future<void> savePlaylist(PlaylistDraft draft) => library.createPlaylist(
