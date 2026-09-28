@@ -90,9 +90,16 @@ On the **Variables** tab, add `BUNDLE_ID` = your bundle ID from step 1
 
 ### 6. Build and upload
 
-Go to the **Actions** tab › **TestFlight** › **Run workflow**. It takes about
-15 minutes. Afterwards App Store Connect needs a few more minutes to process
-the build. You'll get an email when it's ready.
+Start the **TestFlight** workflow in any of these ways:
+
+- **Actions** tab › **TestFlight** › **Run workflow**. This button only
+  appears once the workflow is on the `main` branch.
+- Push a commit whose message contains `[testflight]`.
+- Push a tag starting with `testflight-` (e.g. `testflight-2`). You can create
+  one on GitHub under **Releases** › **Draft a new release**.
+
+The build takes about 5–15 minutes. Afterwards App Store Connect needs a few
+more minutes to process it. You'll get an email when it's ready.
 
 ### 7. Install it on your iPhone
 
@@ -102,8 +109,8 @@ the build. You'll get an email when it's ready.
 2. On your iPhone install **TestFlight** from the App Store and sign in with
    the same Apple ID. Accept the invite and tap **Install**.
 
-TestFlight builds expire after 90 days. Run the workflow again to get a fresh
-one.
+TestFlight builds expire after 90 days. Start the workflow again to get a
+fresh one.
 
 ## Using the app
 
