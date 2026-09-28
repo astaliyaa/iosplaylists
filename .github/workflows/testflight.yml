@@ -1,0 +1,73 @@
+# Builds a signed release and uploads it to TestFlight.
+# Run it from the Actions tab ("TestFlight" > "Run workflow").
+# One-time setup (secrets, bundle ID, App Store Connect app): see README.md.
+name: TestFlight
+
+on:
+  workflow_dispatch:
+
+jobs:
+  testflight:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_KEY_IDENTIFIER: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER }}
+      APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+      CERTIFICATE_PRIVATE_KEY: ${{ secrets.CERTIFICATE_PRIVATE_KEY }}
+      BUNDLE_ID: ${{ vars.BUNDLE_ID }}
+    steps:
+      - name: Check configuration
+        run: |
+          missing=0
+          for name in APP_STORE_CONNECT_ISSUER_ID APP_STORE_CONNECT_KEY_IDENTIFIER \
+                      APP_STORE_CONNECT_PRIVATE_KEY CERTIFICATE_PRIVATE_KEY BUNDLE_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is not set. See 'One-time setup' in README.md."
+              missing=1
+            fi
+          done
+          exit $missing
+
+      - uses: actions/checkout@v5
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.x
+          cache: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Codemagic CLI tools
+        run: pip install codemagic-cli-tools
+
+      - name: Use your bundle ID
+        run: sed -i '' "s/com\.example\.promptlist/${BUNDLE_ID}/g" ios/Runner.xcodeproj/project.pbxproj
+
+      - name: Prepare Flutter project
+        run: |
+          flutter pub get
+          flutter build ios --release --config-only
+
+      - name: Set up code signing
+        run: |
+          keychain initialize
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
+          keychain add-certificates
+          xcode-project use-profiles
+
+      - name: Build IPA
+        run: |
+          flutter build ipa --release \
+            --build-number=${{ github.run_number }} \
+            --export-options-plist="$HOME/export_options.plist"
+
+      - name: Upload to TestFlight
+        run: app-store-connect publish --path "$(find build/ios/ipa -name '*.ipa' | head -n 1)"
